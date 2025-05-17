@@ -16,7 +16,7 @@ def build_data_loader(
     data_source=None,
     batch_size=64,
     n_domain=0,
-    n_ins=2,
+    n_ins=1,
     tfm=None,
     is_train=True,
     dataset_wrapper=None
