@@ -1,4 +1,146 @@
-def compute_accuracy(output, target, topk=(1, )):
+import torch
+import torch.nn.functional as F
+
+import torch
+import torch.nn.functional as F
+
+def compute_accuracy_t2i(output, target, topk=(1,)):
+    # Shape: (B, 4C, C+1)
+    B, fourC, C_plus_1 = output.shape    
+    C = fourC // 4
+    numClasses = C_plus_1 - 1
+
+    # Make two copies of the output
+    output_log_softmax = F.log_softmax(output.clone(), dim=2)  # log probs version
+    output_target = output.clone()  # copy to modify
+
+    # Modify output_target[i, j, 0] = output[i, j, (j % C) + 1]
+    for i in range(B):
+        for j in range(fourC):
+            idx = (j % numClasses) + 1
+            output_target[i, j, 0] = output_target[i, j, idx]
+
+    # --- KL Divergence ---
+    output_target_softmax = F.softmax(output_target, dim=2)  # convert target to probabilities
+
+    output_softmax = F.softmax(output.clone(), dim=2) 
+    # print("output first vector\n", output[0,0,:])
+    # print("output_target first vector\n", output[0,0,:])
+
+    # print("output_softmax first vector\n", output_softmax[0,0,:])
+    # print("output_target_softmax first vector\n", output_target_softmax[0,0,:])
+
+    # print("output_log_softmax shape: ", output_log_softmax.shape)
+    # print("output_target_softmax shape: ", output_target_softmax.shape)
+
+    # Compute KL divergence using F.kl_div
+    kl_div = F.kl_div(
+        output_log_softmax,
+        output_target_softmax,
+        reduction='none',  # keep shape: (B, 4C, C+1)
+        log_target=False
+    )
+
+    # print("kl_div shape: ", kl_div.shape)
+
+    # Sum over class dimension to get (B, 4C)
+    kl_div_per_row = kl_div.sum(dim=2)  # shape: (B, 4C)
+
+    # print("kl_div_per_row shape: ", kl_div_per_row.shape)
+    
+
+    # --- Accuracy computation based on kl_div_per_row (smaller is better) ---
+    maxk = max(topk)
+    batch_size = target.size(0)
+
+    # Get top-k predictions from kl_div_per_row
+    topk_vals, topk_indices = kl_div_per_row.topk(maxk, dim=1, largest=False, sorted=True)
+
+    
+    topk_indices = topk_indices % numClasses
+
+    # print("topk_vals shape: ", topk_vals.shape)
+    # print("topk_indices shape: ", topk_indices.shape)
+
+    pred = topk_indices.t()  # shape: (maxk, batch_size)
+
+    # print("pred\n", pred)
+    # print("target\n", target)
+    correct = pred.eq(target.view(1, -1).expand_as(pred))
+
+    # input("press enter to continue")
+
+    res = []
+    for k in topk:
+        correct_k = correct[:k].reshape(-1).float().sum(0, keepdim=True)
+        acc = correct_k.mul_(100.0 / batch_size)
+        res.append(acc)
+
+    return res
+
+
+
+def compute_accuracy_i2t(output, target, topk=(1,), printoutput=False):
+    """Computes the accuracy over the k top predictions for
+    the specified values of k, and prints the top-k values and indices.
+
+    Args:
+        output (torch.Tensor): prediction matrix with shape (batch_size, num_classes).
+        target (torch.LongTensor): ground truth labels with shape (batch_size).
+        topk (tuple, optional): accuracy at top-k will be computed.
+
+    Returns:
+        list: accuracy at top-k.
+    """
+    maxk = max(topk)
+    batch_size = target.size(0)
+    
+
+    # Set print options to show full tensor with 1 decimal point precision
+    # torch.set_printoptions(threshold=float('inf'), edgeitems=float('inf'), linewidth=200, precision=1)
+    torch.set_printoptions(threshold=float('inf'), edgeitems=float('inf'), linewidth=1000, precision=1)
+
+    logits_i2t=output
+    logits_t2i=output.t()
+
+    loss_i2t = F.cross_entropy(logits_i2t, target)
+    loss_t2i = F.cross_entropy(logits_t2i, target)
+    
+
+    if printoutput:
+        # print("output_logits\n", output)
+        # print("output_target\n", target)
+        print("loss_i2t: ", loss_i2t.item())
+        print("loss_t2i: ", loss_t2i.item())
+        # input("Press enter1 to continue")
+
+    torch.set_printoptions(profile='default')
+
+    if isinstance(output, (tuple, list)):
+        output = output[0]
+
+    # Get top-k predictions
+    topk_vals, topk_indices = output.topk(maxk, dim=1, largest=True, sorted=True)
+
+    topk_vals_test, topk_indices_test = output.topk(10, dim=1, largest=True, sorted=True)    
+
+    # print("topk_vals_i2t\n", topk_vals_test)
+    # print("topk_indices_i2t\n", topk_indices_test)
+    # print("target_i2t\n")
+    # print(target)
+
+    pred = topk_indices.t()  # shape: (maxk, batch_size)
+    correct = pred.eq(target.view(1, -1).expand_as(pred))
+
+    res = []
+    for k in topk:
+        correct_k = correct[:k].reshape(-1).float().sum(0, keepdim=True)
+        acc = correct_k.mul_(100.0 / batch_size)
+        res.append(acc)
+
+    return res, loss_i2t, loss_t2i
+
+def compute_accuracy(output, target, topk=(1, ), printoutput=False):
     """Computes the accuracy over the k top predictions for
     the specified values of k.
 
@@ -13,6 +155,12 @@ def compute_accuracy(output, target, topk=(1, )):
     """
     maxk = max(topk)
     batch_size = target.size(0)
+
+    if printoutput:
+        print("output_logits\n", output)
+        print("output_target\n", target)
+        input("Press enter1 to continue")
+
 
     if isinstance(output, (tuple, list)):
         output = output[0]
