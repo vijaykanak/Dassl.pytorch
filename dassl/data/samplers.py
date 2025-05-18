@@ -35,6 +35,8 @@ class RandomDomainSampler(Sampler):
         self.n_domain = n_domain
         self.length = len(list(self.__iter__()))
 
+        print("RandomDomainSampler chosen")
+
     def __iter__(self):
         domain_dict = copy.deepcopy(self.domain_dict)
         final_idxs = []
@@ -89,6 +91,8 @@ class SeqDomainSampler(Sampler):
         # n_domain denotes number of domains sampled in a minibatch
         self.n_domain = n_domain
         self.length = len(list(self.__iter__()))
+
+        print("SeqDomainSampler chosen")
 
     def __iter__(self):
         domain_dict = copy.deepcopy(self.domain_dict)
@@ -146,6 +150,8 @@ class RandomClassSampler(Sampler):
         # estimate number of images in an epoch
         self.length = len(list(self.__iter__()))
 
+        print("RandomClassSampler chosen")
+
     def __iter__(self):
         batch_idxs_dict = defaultdict(list)
 
@@ -186,6 +192,9 @@ def build_sampler(
     n_domain=0,
     n_ins=16
 ):
+    print("build_sampler called")
+    # breakpoint()
+
     if sampler_type == "RandomSampler":
         return RandomSampler(data_source)
 
