@@ -430,9 +430,42 @@ class SimpleTrainer(TrainerBase):
         # Close writer
         self.close_writer()
 
+    def PrintAccuracyResults(self):
+        self.set_model_mode("eval")
+
+        total_correct = 0
+        total_samples = 0
+        total_i2t_loss = 0
+        total_t2i_loss = 0
+        for batch_idx, batch in enumerate(tqdm(self.test_loader)):
+            image_input, label = self.parse_batch_test(batch)
+            output = self.model_inference(image_input)
+            topk_accuracy, i2t_loss, t2i_loss =compute_accuracy_i2t(output, label,(1, ),True)
+
+            # Assuming compute_accuracy gives top-1 accuracy in topk_accuracy[0] as a proportion (0.0 to 1.0)
+            batch_size = label.size(0)
+            total_correct += topk_accuracy[0].item() * batch_size
+            total_samples += batch_size
+
+            total_i2t_loss += i2t_loss.item() * batch_size
+            total_t2i_loss += t2i_loss.item() * batch_size
+
+        # Final Accuracy
+        total_accuracy = total_correct / total_samples
+        avg_i2t_loss = total_i2t_loss / total_samples
+        avg_t2i_loss = total_t2i_loss / total_samples
+
+        print(f"Total i2t Accuracy at epoch {self.epoch + 1}: {total_accuracy:.4f}")
+        print(f"Average i2t loss: {avg_i2t_loss:.4f}")
+        print(f"Average t2i loss: {avg_t2i_loss:.4f}")
+
+        self.set_model_mode("train")
+
     def after_epoch(self):
 
-        self.build_image_ground_truth_full_batch_from_loader(self.train_loader_x, self.device)
+        # self.build_image_ground_truth_full_batch_from_loader(self.train_loader_x, self.device)
+        if((self.epoch +1) % 5 == 0):
+            self.PrintAccuracyResults()
         
 
         last_epoch = (self.epoch + 1) == self.max_epoch
@@ -764,7 +797,7 @@ class TrainerX(SimpleTrainer):
             assert len(images) > 0, f"Class {class_id} does not any image"
             # Pad with the last image if fewer than 4
             if len(images) < 4:
-                print(f"Class {class_id} has only {len(images)} images. Padding with the last image.")
+                # print(f"Class {class_id} has only {len(images)} images. Padding with the last image.")
                 last_image = images[-1]
                 while len(images) < 4:
                     images.append(last_image)
