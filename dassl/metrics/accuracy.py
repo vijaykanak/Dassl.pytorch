@@ -164,20 +164,20 @@ def compute_accuracy_i2t(output, target, topk=(1,), printoutput=False):
     num_filtered_logits_per_text = filtered_logits_per_text.shape[0]
 
     
-    print("num_filtered_logits_per_image_compute_accuracy = ", num_filtered_logits_per_image)
-    print("num_filtered_logits_per_text_compute_accuracy = ", num_filtered_logits_per_text)
+    # print("num_filtered_logits_per_image_compute_accuracy = ", num_filtered_logits_per_image)
+    # print("num_filtered_logits_per_text_compute_accuracy = ", num_filtered_logits_per_text)
 
 
     # loss_i2t = F.cross_entropy(logits_i2t, target)
     # loss_t2i = F.cross_entropy(logits_t2i, target)
     
 
-    if printoutput:
-        # print("output_logits\n", output)
-        # print("output_target\n", target)
-        print("loss_i2t: ", loss_i2t.item())
-        print("loss_t2i: ", loss_t2i.item())
-        # input("Press enter1 to continue")
+    # if printoutput:
+    #     # print("output_logits\n", output)
+    #     # print("output_target\n", target)
+    #     print("loss_i2t: ", loss_i2t.item())
+    #     print("loss_t2i: ", loss_t2i.item())
+    #     # input("Press enter1 to continue")
 
     torch.set_printoptions(profile='default')
 
