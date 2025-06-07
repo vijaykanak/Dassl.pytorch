@@ -36,26 +36,26 @@ def compute_accuracy_with_i2t_t2i_loss(output, target, topk=(1,), printoutput=Fa
     # Text to Image loss
     #############################################################
 
-    logits_per_text = logits_i2t.T  # Shape: [37, 32]
-    # Step 2: Build text → list of image indices mapping
+    logits_per_text = logits_i2t.T 
+    # Build text → list of image indices mapping
     text_to_image_indices = defaultdict(list)
     for img_idx, text_idx in enumerate(target):
         text_to_image_indices[int(text_idx)].append(img_idx)
 
-    # Step 3: Create soft target matrix [num_texts, num_images]
+    # Create soft target matrix [num_texts, num_images]
     targets_T = torch.zeros_like(logits_per_text)  # [num_texts, num_images]
     for text_idx, image_list in text_to_image_indices.items():
         if len(image_list) > 0:
             weight = 1.0 / len(image_list)
             targets_T[text_idx, image_list] = weight
 
-    # Step 4: Filter rows for texts with atleast one matching image
+    # Filter rows for texts with atleast one matching image
     valid_mask = targets_T.sum(dim=1) > 0  
     filtered_logits_per_text = logits_per_text[valid_mask]
     filtered_targets = targets_T[valid_mask]
     filtered_target_indices = filtered_targets.argmax(dim=1)
 
-    # Step 5: Compute soft cross-entropy using KL divergence
+    # Compute soft cross-entropy using KL divergence
     log_probs = F.log_softmax(filtered_logits_per_text, dim=1)   # log p_model
     loss_t2i = F.kl_div(log_probs, filtered_targets, reduction='batchmean')    
 
