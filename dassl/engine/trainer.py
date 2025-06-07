@@ -18,7 +18,7 @@ from dassl.utils import (
 from dassl.modeling import build_head, build_backbone
 from dassl.evaluation import build_evaluator
 
-from dassl.metrics import compute_accuracy, compute_accuracy_i2t, compute_accuracy_t2i
+from dassl.metrics import compute_accuracy, compute_accuracy_with_i2t_t2i_loss
 
 import torch.nn.functional as F
 
@@ -361,13 +361,6 @@ class SimpleTrainer(TrainerBase):
 
         self.dm = dm
 
-        self.ground_truth_images = {}
-
-        self.ground_truth_images_1 = {}
-        self.ground_truth_images_2 = {}
-        self.ground_truth_images_3 = {}
-        self.ground_truth_images_4 = {}
-
     def build_model(self):
         """Build and register model.
 
@@ -430,44 +423,7 @@ class SimpleTrainer(TrainerBase):
         # Close writer
         self.close_writer()
 
-    def PrintAccuracyResults(self):
-        self.set_model_mode("eval")
-
-        total_correct = 0
-        total_samples = 0
-        total_i2t_loss = 0
-        total_t2i_loss = 0
-        for batch_idx, batch in enumerate(tqdm(self.test_loader)):
-            image_input, label = self.parse_batch_test(batch)
-            output = self.model_inference(image_input)
-            topk_accuracy, i2t_loss, t2i_loss =compute_accuracy_i2t(output, label,(1, ),True)
-
-            # Assuming compute_accuracy gives top-1 accuracy in topk_accuracy[0] as a proportion (0.0 to 1.0)
-            batch_size = label.size(0)
-            total_correct += topk_accuracy[0].item() * batch_size
-            total_samples += batch_size
-
-            total_i2t_loss += i2t_loss.item() * batch_size
-            total_t2i_loss += t2i_loss.item() * batch_size
-
-        # Final Accuracy
-        total_accuracy = total_correct / total_samples
-        avg_i2t_loss = total_i2t_loss / total_samples
-        avg_t2i_loss = total_t2i_loss / total_samples
-
-        print(f"Total i2t Accuracy at epoch {self.epoch + 1}: {total_accuracy:.4f}")
-        print(f"Average i2t loss: {avg_i2t_loss:.4f}")
-        print(f"Average t2i loss: {avg_t2i_loss:.4f}")
-
-        self.set_model_mode("train")
-
     def after_epoch(self):
-
-        # self.build_image_ground_truth_full_batch_from_loader(self.train_loader_x, self.device)
-        if((self.epoch +1) % 5 == 0):
-            self.PrintAccuracyResults()
-        
-
         last_epoch = (self.epoch + 1) == self.max_epoch
         do_test = not self.cfg.TEST.NO_TEST
         meet_checkpoint_freq = (
@@ -491,103 +447,6 @@ class SimpleTrainer(TrainerBase):
             self.save_model(self.epoch, self.output_dir)
 
     @torch.no_grad()
-    def compute_accuracy_I2T_T2I(self, data_loader, device):
-        total_correct = 0
-        total_samples = 0
-
-        # output_ground_truth_full_batch = self.model(self.ground_truth_images)  # (num_classes, num_classes)
-        output_ground_truth_batch_1 = self.model(self.ground_truth_images_1)
-        output_ground_truth_batch_1 = output_ground_truth_batch_1.t()
-        output_ground_truth_batch_2 = self.model(self.ground_truth_images_2)
-        output_ground_truth_batch_2 = output_ground_truth_batch_2.t()
-        output_ground_truth_batch_3 = self.model(self.ground_truth_images_3)
-        output_ground_truth_batch_3 = output_ground_truth_batch_3.t()
-        output_ground_truth_batch_4 = self.model(self.ground_truth_images_4)
-        output_ground_truth_batch_4 = output_ground_truth_batch_4.t()
-
-        output_ground_truth_full_batch = torch.cat([output_ground_truth_batch_1, output_ground_truth_batch_2, \
-    output_ground_truth_batch_3, output_ground_truth_batch_4], dim=0)  # shape: (m, 4n)
-
-        output_ground_truth_batch_1_softmax = F.softmax(output_ground_truth_batch_1, dim=1)
-        topk_vals_1, topk_indices_1 = output_ground_truth_batch_1_softmax.topk(5, dim=1, largest=True, sorted=True)
-        # print("topk_vals_1_ground_truth\n", topk_vals_1)
-        # print("topk_indices_1_ground_truth\n", topk_indices_1)
-
-        output_ground_truth_batch_2_softmax = F.softmax(output_ground_truth_batch_2, dim=1)
-        topk_vals_2, topk_indices_2 = output_ground_truth_batch_2_softmax.topk(5, dim=1, largest=True, sorted=True)
-        # print("topk_vals_2_ground_truth\n", topk_vals_2)
-        # print("topk_indices_2_ground_truth\n", topk_indices_2)
-
-        output_ground_truth_batch_3_softmax = F.softmax(output_ground_truth_batch_3, dim=1)
-        topk_vals_3, topk_indices_3 = output_ground_truth_batch_3_softmax.topk(5, dim=1, largest=True, sorted=True)
-        # print("topk_vals_3_ground_truth\n", topk_vals_3)
-        # print("topk_indices_3_ground_truth\n", topk_indices_3)
-
-        output_ground_truth_batch_4_softmax = F.softmax(output_ground_truth_batch_4, dim=1)
-        topk_vals_4, topk_indices_4 = output_ground_truth_batch_4_softmax.topk(5, dim=1, largest=True, sorted=True)
-        # print("topk_vals_4_ground_truth\n", topk_vals_4)
-        # print("topk_indices_4_ground_truth\n", topk_indices_4)
-        
-        # input("Press enter to continue")
-
-        for batch_idx, batch in enumerate(tqdm(data_loader)):
-            inputs, label = self.parse_batch_test(batch)        
-            label = label.to(device)
-
-            # Step 1: Get model outputs
-            output_batch0 = self.model(inputs)  # (batch_size, num_classes)
-            
-
-            num_repeats = 4
-            output_batch = torch.cat([output_batch0] * num_repeats, dim=1)  # shape: (B, num_repeats * C)
-
-
-            # print("output_batch size", output_batch.shape)
-            # print("output_ground_truth_full_batch size", output_ground_truth_full_batch.shape)
-
-            # Step 2: Get ground-truth class embeddings
-            label_image_batch = label
-            # print("label_image_batch size", label_image_batch.shape)
-            # output_ground_truth_batch = output_ground_truth_full_batch[label_image_batch]  # (batch_size, num_classes)
-            output_ground_truth_batch = output_ground_truth_full_batch
-            # print("label_image_batch size", label_image_batch.shape)
-
-            # Step 3: Expand and prepare tensors
-            output_batch_expanded = output_batch.unsqueeze(2)  # (batch_size, num_classes, 1)
-            # print("output_batch_expanded size", output_batch_expanded.shape)
-            
-            output_ground_truth_batch_exp = output_ground_truth_batch.unsqueeze(0)
-            # print("output_ground_truth_batch_exp size", output_ground_truth_batch_exp.shape)
-            output_ground_truth_repeated = output_ground_truth_batch_exp.expand(output_batch.size(0), -1, -1)  # (batch_size, num_classes, num_classes)
-            # print("output_ground_truth_repeated before permute size", output_ground_truth_repeated.shape)
-            # output_ground_truth_repeated = output_ground_truth_repeated.permute(0, 2, 1)
-            # print("output_ground_truth_repeated after permute size", output_ground_truth_repeated.shape)
-
-            # print("output_ground_truth_repeated size: ", output_ground_truth_repeated.shape)
-            # print("output_batch_expanded size: ", output_batch_expanded.shape)
-
-            # Step 4: Concatenate predictions and reference
-            output_enhanced_batch = torch.cat([output_batch_expanded, output_ground_truth_repeated], dim=2)  # (batch_size, num_classes, num_classes + 1)
-            # print("output_enhanced_batch size", output_enhanced_batch.shape)
-
-            # Step 5: Compute accuracy for this batch
-            # compute_accuracy should return a tensor of shape (top_k,)
-            topk_accuracy = compute_accuracy_t2i(output_enhanced_batch, label)
-            # topk_accuracy_i2t = compute_accuracy_i2t(inputs, label)
-
-            
-
-            # Assuming compute_accuracy gives top-1 accuracy in topk_accuracy[0] as a proportion (0.0 to 1.0)
-            batch_size = label.size(0)
-            total_correct += topk_accuracy[0].item() * batch_size
-            total_samples += batch_size
-
-        # Final Accuracy
-        total_accuracy = total_correct / total_samples
-        print(f"Total Top-1 Accuracy over dataset: {total_accuracy:.4f}")
-
-
-    @torch.no_grad()
     def test(self, split=None):
         """A generic testing pipeline."""
         self.set_model_mode("eval")
@@ -603,13 +462,8 @@ class SimpleTrainer(TrainerBase):
             data_loader = self.test_loader
 
         
-        print(f"Evaluate on the *{split}* set by T2I")
-        # self.compute_accuracy_I2T_T2I(data_loader, self.device)  
-        # self.compute_accuracy_I2T_T2I(data_loader, self.device) 
-        # print("top_1 accuracy T2I = ", topk_accuracy[0].item()) 
-
-        # input("Press enter to continue")
-
+        print(f"Evaluate on the *{split}* set by T2I")   
+       
         total_correct = 0
         total_samples = 0
         total_i2t_loss = 0
@@ -617,7 +471,7 @@ class SimpleTrainer(TrainerBase):
         for batch_idx, batch in enumerate(tqdm(data_loader)):
             image_input, label = self.parse_batch_test(batch)
             output = self.model_inference(image_input)
-            topk_accuracy, i2t_loss, t2i_loss =compute_accuracy_i2t(output, label,(1, ),True)
+            topk_accuracy, i2t_loss, t2i_loss = compute_accuracy_with_i2t_t2i_loss(output, label,(1, ),True)
 
             # Assuming compute_accuracy gives top-1 accuracy in topk_accuracy[0] as a proportion (0.0 to 1.0)
             batch_size = label.size(0)
@@ -766,62 +620,12 @@ class TrainerXU(SimpleTrainer):
 class TrainerX(SimpleTrainer):
     """A base trainer using labeled data only."""
 
-    @torch.no_grad()
-    def build_image_ground_truth_full_batch_from_loader(self, data_loader, device):
-        """Collects 4 images per class and groups them into 4 separate tensors with one image per class."""
-        from collections import defaultdict
-        
-        # Dictionary of lists: class_id -> list of images
-        class_to_images = defaultdict(list)
-        
-        for batch in data_loader:
-            inputs, labels = batch["img"].to(device), batch["label"].to(device)
-            
-            for img, label in zip(inputs, labels):
-                label_item = label.item()
-                if len(class_to_images[label_item]) < 4:
-                    class_to_images[label_item].append(img.unsqueeze(0))  # shape: (1, C, H, W)
-            
-            # # Stop if all classes have 4 images
-            # if all(len(imgs) == 4 for imgs in class_to_images.values()) and len(class_to_images) == num_classes:
-            #     break
-
-        # Sort by class id to keep consistent order
-        ground_truth_images_1 = []
-        ground_truth_images_2 = []
-        ground_truth_images_3 = []
-        ground_truth_images_4 = []
-
-        for class_id in sorted(class_to_images.keys()):
-            images = class_to_images[class_id]
-            assert len(images) > 0, f"Class {class_id} does not any image"
-            # Pad with the last image if fewer than 4
-            if len(images) < 4:
-                # print(f"Class {class_id} has only {len(images)} images. Padding with the last image.")
-                last_image = images[-1]
-                while len(images) < 4:
-                    images.append(last_image)
-
-            ground_truth_images_1.append(images[0])
-            ground_truth_images_2.append(images[1])
-            ground_truth_images_3.append(images[2])
-            ground_truth_images_4.append(images[3])
-
-        # Convert lists to tensors
-        self.ground_truth_images_1 = torch.cat(ground_truth_images_1, dim=0)  # shape: (num_classes, C, H, W)
-        self.ground_truth_images_2 = torch.cat(ground_truth_images_2, dim=0)
-        self.ground_truth_images_3 = torch.cat(ground_truth_images_3, dim=0)
-        self.ground_truth_images_4 = torch.cat(ground_truth_images_4, dim=0)
-
-
     def run_epoch(self):
         self.set_model_mode("train")
         losses = MetricMeter()
         batch_time = AverageMeter()
         data_time = AverageMeter()
         self.num_batches = len(self.train_loader_x)
-
-        
 
         end = time.time()
         for self.batch_idx, batch in enumerate(self.train_loader_x):
